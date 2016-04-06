@@ -1,4 +1,6 @@
 <?php
+namespace ResqueScheduler;
+
 /**
  * ResqueScheduler worker to handle scheduling of delayed tasks.
  *
@@ -7,22 +9,13 @@
  * @copyright	(c) 2012 Chris Boulton
  * @license		http://www.opensource.org/licenses/mit-license.php
  */
-class ResqueScheduler_Worker
+class Worker extends \Resque_Worker
 {
-	const LOG_NONE = 0;
-	const LOG_NORMAL = 1;
-	const LOG_VERBOSE = 2;
-	
-	/**
-	 * @var int Current log level of this worker.
-	 */
-	public $logLevel = 0;
-	
 	/**
 	 * @var int Interval to sleep for between checking schedules.
 	 */
 	protected $interval = 5;
-	
+
 	/**
 	* The primary loop for a worker.
 	*
@@ -38,13 +31,13 @@ class ResqueScheduler_Worker
 		}
 
 		$this->updateProcLine('Starting');
-		
+
 		while (true) {
 			$this->handleDelayedItems();
 			$this->sleep();
 		}
 	}
-	
+
 	/**
 	 * Handle delayed items for the next scheduled timestamp.
 	 *
@@ -56,11 +49,11 @@ class ResqueScheduler_Worker
 	public function handleDelayedItems($timestamp = null)
 	{
 		while (($timestamp = ResqueScheduler::nextDelayedTimestamp($timestamp)) !== false) {
-			$this->updateProcLine('Processing Delayed Items');
+			$this->updateProcLine('Processing Delayed Items at '.self::formatTimestamp($timestamp));
 			$this->enqueueDelayedItemsForTimestamp($timestamp);
 		}
 	}
-	
+
 	/**
 	 * Schedule all of the delayed jobs for a given timestamp.
 	 *
@@ -73,9 +66,9 @@ class ResqueScheduler_Worker
 	{
 		$item = null;
 		while ($item = ResqueScheduler::nextItemForTimestamp($timestamp)) {
-			$this->log('queueing ' . $item['class'] . ' in ' . $item['queue'] .' [delayed]');
-			
-			Resque_Event::trigger('beforeDelayedEnqueue', array(
+			$this->logger->debug('queueing ' . $item['class'] . ' in ' . $item['queue'] .' [delayed]');
+
+			\Resque_Event::trigger('beforeDelayedEnqueue', array(
 				'queue' => $item['queue'],
 				'class' => $item['class'],
 				'args'  => $item['args'],
@@ -85,7 +78,7 @@ class ResqueScheduler_Worker
 			call_user_func_array('Resque::enqueue', $payload);
 		}
 	}
-	
+
 	/**
 	 * Sleep for the defined interval.
 	 */
@@ -93,7 +86,7 @@ class ResqueScheduler_Worker
 	{
 		sleep($this->interval);
 	}
-	
+
 	/**
 	 * Update the status of the current worker process.
 	 *
@@ -109,19 +102,10 @@ class ResqueScheduler_Worker
 			setproctitle('resque-scheduler-' . ResqueScheduler::VERSION . ': ' . $status);
 		}
 	}
-	
-	/**
-	 * Output a given log message to STDOUT.
-	 *
-	 * @param string $message Message to output.
-	 */
-	public function log($message)
-	{
-		if($this->logLevel == self::LOG_NORMAL) {
-			fwrite(STDOUT, "*** " . $message . "\n");
-		}
-		else if($this->logLevel == self::LOG_VERBOSE) {
-			fwrite(STDOUT, "** [" . strftime('%T %Y-%m-%d') . "] " . $message . "\n");
-		}
+
+	private static function formatTimestamp($ts) {
+		$time = new \DateTime();
+		$time->setTimestamp($ts);
+		return $time->format("Y-m-d H:i:s");
 	}
 }
