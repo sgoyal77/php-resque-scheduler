@@ -14,10 +14,10 @@ class ResqueScheduler
 {
 	const VERSION = "1.0";
 
-	private static $KEY_SCHEDULE = 'resque:scheduler:schedule';
+	private static $KEY_SCHEDULE = 'scheduler:schedule';
 	private static $KEY_TIME = 'resque:scheduler:time:';
 	private static $KEY_ITEM = 'resque:scheduler:item:';
-	private static $KEY_ID = 'resque:scheduler:id:';
+	private static $KEY_ID = 'scheduler:id:';
 
 	/**
 	 * Enqueue a job in a given number of seconds from now.
