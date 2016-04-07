@@ -34,6 +34,7 @@ class Worker extends \Resque_Worker
 
 		while (true) {
 			$this->handleDelayedItems();
+			$this->updateProcLine('Waiting for next delayed timestamp, current ts '.self::formatTimestamp());
 			$this->sleep();
 		}
 	}
@@ -66,7 +67,9 @@ class Worker extends \Resque_Worker
 	{
 		$item = null;
 		while ($item = ResqueScheduler::nextItemForTimestamp($timestamp)) {
-			$this->logger->debug('queueing ' . $item['class'] . ' in ' . $item['queue'] .' [delayed]');
+			$status = 'queueing ' . $item['class'] . ' in ' . $item['queue'] .' [delayed]';
+			$this->logger->debug($status);
+			$this->updateProcLine($status);
 
 			\Resque_Event::trigger('beforeDelayedEnqueue', array(
 				'queue' => $item['queue'],
@@ -98,14 +101,19 @@ class Worker extends \Resque_Worker
 	 */
 	private function updateProcLine($status)
 	{
-		if(function_exists('setproctitle')) {
-			setproctitle('resque-scheduler-' . ResqueScheduler::VERSION . ': ' . $status);
+		$processTitle = 'resque-scheduler-' . ResqueScheduler::VERSION . ': ' . $status;
+		if(function_exists('cli_set_process_title')) {
+			@cli_set_process_title($processTitle);
+		}
+		else if(function_exists('setproctitle')) {
+			setproctitle($processTitle);
 		}
 	}
 
-	private static function formatTimestamp($ts) {
+	private static function formatTimestamp($ts = null) {
 		$time = new \DateTime();
-		$time->setTimestamp($ts);
+		if (null != $ts)
+			$time->setTimestamp($ts);
 		return $time->format("Y-m-d H:i:s");
 	}
 }
