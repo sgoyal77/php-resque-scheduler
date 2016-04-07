@@ -256,7 +256,8 @@ class ResqueScheduler
 	 * Pop a job off the delayed queue for a given timestamp.
 	 *
 	 * @param DateTime|int $timestamp instance of DateTime or UNIX timestamp
-	 * @return array a single job at the specified timestamp
+	 * @return array|boolean a single job at the specified timestamp, or false if there are
+	 *         no jobs left
 	 */
 	public static function nextItemForTimestamp($timestamp)
 	{
@@ -269,9 +270,11 @@ class ResqueScheduler
 			$redis->hdel($key, $jobids[0]);
 			$redis->del($jobids[0]);
 			self::cleanupTimestamp($timestamp);
-		}
 
-		return $job;
+			return $job;
+		} else {
+			return false;
+		}
 	}
 
 	/**
