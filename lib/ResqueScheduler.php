@@ -265,7 +265,7 @@ class ResqueScheduler
 		$jobids = $redis->hkeys($key);
 		if (!empty($jobids)) {
 			$job = $redis->hget($key, $jobids[0]);
-			$job = json_decode($job);
+			$job = json_decode($job, true);
 			$redis->hdel($key, $jobids[0]);
 			$redis->del($jobids[0]);
 			self::cleanupTimestamp($timestamp);
@@ -321,7 +321,7 @@ class ResqueScheduler
 	 */
 	private static function getTimestamp($timestamp)
 	{
-		if ($timestamp instanceof DateTime) {
+		if ($timestamp instanceof \DateTime) {
 			$timestamp = $timestamp->getTimestamp();
 		}
 
