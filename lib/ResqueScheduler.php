@@ -16,7 +16,7 @@ class ResqueScheduler
 
 	private static $KEY_SCHEDULE = 'scheduler:schedule';
 	private static $KEY_TIME = 'resque:scheduler:time:';
-	private static $KEY_ITEM = 'resque:scheduler:item:';
+	private static $KEY_JOB = 'resque:scheduler:job:';
 	private static $KEY_ID = 'scheduler:id:';
 
 	/**
@@ -73,24 +73,38 @@ class ResqueScheduler
 	 * Directly append a job to the delayed queue schedule.
 	 *
 	 * @param DateTime|int $timestamp Timestamp job is scheduled to be run at
-	 * @param array $item hashmap representing the job that will get queued
+	 * @param array $job hashmap representing the job that will get queued
 	 * @return string the id of job pushed onto the delayed queue
 	 */
-	public static function delayedPush($timestamp, $item)
+	public static function delayedPush($timestamp, $job)
 	{
 		$redis = \Resque::redis();
 		$timestamp = self::getTimestamp($timestamp);
-		$item = json_encode($item);
+		$job = json_encode($job);
 		$id = \Resque::generateJobId();
 
-		//store the job in three different ways:
+		//store the job in three different ways (so that we can access the job by different
+		//methods and also enable deleting of the job through a multitude of ways without
+		//a performance hit)
 		//1) in a hash set of job ids and their corresponding parameters stored by timestamp
-		//2) in a hash set of job ids and their execution time stored by the job's parameters
+		//2) in a hash set of job ids and their execution time stored by the job itself
 		//3) by the job id
-		$redis->hset(self::timeKey($timestamp), $id, $item);
-		$redis->hset(self::jobKey($item), $id, $timestamp);
-		$redis->set(self::idKey($id), $timestamp);
+		$timekey = self::timeKey($timestamp);
+		$jobkey = self::jobKey($job);
+		$idkey = self::idKey($id);
 
+		//by timestamp
+		$redis->hset($timekey, $id, $job);
+		$redis->expireat($timekey, $timestamp + 300);
+
+		//by job itself
+		$redis->hset($jobkey, $id, $timestamp);
+
+		//by the job's id
+		$redis->set($idkey, $timekey.":".$jobkey);
+		$redis->expireat($idkey, $timestamp + 300);
+
+		//add the timestamp to the list timestamps to process
 		$redis->zadd(self::$KEY_SCHEDULE, $timestamp, $timestamp);
 
 		return $id;
@@ -127,14 +141,22 @@ class ResqueScheduler
 	{
 		$redis = \Resque::$redis;
 
-		//get the timestamp at which the job was queued, and then delete the job by its id
-		//at that specific timestamp
-		$timestamp = $redis->get(self::idKey($id));
-		$redis->hdel(self::timeKey($timestamp), $id);
+		//get the time and job represented by the specific id
+		//by id
+		//the data stored is represented as follows: [TIMEKEY]:[JOBKEY]
+		$timeandjob = $redis->get(self::idKey($id));
+		$timeandjob = explode(":", $timeandjob);
+		$timekey = $timeandjob[0];
+		$jobkey = $timeandjob[1];
 
-		//clean up any lingering data for that timestamp
-		self::cleanupTimestamp($timestamp);
+		//delete the job at the timestamp by its id
+		$redis->hdel($timekey, $id);
 
+		//clean up any lingering data for that timestamp and job
+		self::cleanupTimestamp($timekey);
+		self::cleanupJobs($jobkey);
+
+		//return true if we are able to delete the id
 		return 1 == $redis->del(self::idKey($id));
 	}
 
@@ -157,19 +179,18 @@ class ResqueScheduler
        	//execution times, and do the following for each:
        	//1) for the particular time remove the job id from the set of ids to execute
        	//2) remove the job id
-       	//3) clean up the timestamp
        	$jobKey = self::jobKey(self::jobToHash($queue, $class, $args));
        	$idmap = $redis->hgetall($jobKey);
        	foreach ($idmap as $id => $timestamp) {
 
        		$redis->hdel(self::timeKey($timestamp), $id);
        		$redis->del(self::idKey($id));
-       		self::cleanupTimestamp($timestamp);
 
        		$destroyed++;
        	}
 
-       	//finally delete the job
+       	//finally delete the job key itself as all jobs associated with the job have been
+       	//canceled
        	$redis->del($jobKey);
 
        	return $destroyed;
@@ -193,12 +214,20 @@ class ResqueScheduler
 
         //get the particular list of jobs queued for the item, and find the id of the one
         //that is queued for the timestamp that is passed in
-        $idmap = $redis->hgetall(self::jobKey(self::jobToHash($queue, $class, $args)));
+        $jobkey = self::jobKey(self::jobToHash($queue, $class, $args));
+        $idmap = $redis->hgetall($jobkey);
         foreach ($idmap as $id => $ts) {
+
+        	//if the timestamp of the particular job id matches the timestamp passed in
+        	//then delete that job id, and cleanup the 'job' and 'time' hashes
         	if (intval($ts) == $timestamp) {
-				$redis->hdel(self::timeKey($timestamp), $id);
+
+        		$timekey = self::timeKey($timestamp);
+				$redis->hdel($timekey, $id);
 				$redis->del(self::idKey($id));
-				self::cleanupTimestamp($timestamp);
+				self::cleanupJobs($jobkey);
+				self::cleanupTimestamp($timekey);
+
 				return true;
         	}
         }
@@ -262,14 +291,25 @@ class ResqueScheduler
 	public static function nextItemForTimestamp($timestamp)
 	{
 		$redis = \Resque::$redis;
-		$key = self::timeKey($timestamp);
-		$jobids = $redis->hkeys($key);
+
+		//get the timekey for the timestamp and get all the job ids associated with that
+		//timestamp
+		$timekey = self::timeKey($timestamp);
+		$jobids = $redis->hkeys($timekey);
+
+		//if there are job ids in the list then get the actual job for the very first
+		//job id in the list, and return that.
+		//We also delete the job from the timestamp, the job itself, and
+		//cleanup the 'job' and 'time' hashes in case they are empty
 		if (!empty($jobids)) {
-			$job = $redis->hget($key, $jobids[0]);
+
+			$job = $redis->hget($timekey, $jobids[0]);
 			$job = json_decode($job, true);
-			$redis->hdel($key, $jobids[0]);
-			$redis->del($jobids[0]);
-			self::cleanupTimestamp($timestamp);
+
+			$redis->hdel($timekey, $jobids[0]);
+			$redis->del(self::idKey($jobids[0]));
+			self::cleanupJobs(self::jobKey($job));
+			self::cleanupTimestamp($timekey);
 
 			return $job;
 		} else {
@@ -278,21 +318,45 @@ class ResqueScheduler
 	}
 
 	/**
-	 * If there are no jobs for a given timestamp, delete references to it.
+	 * If a particular timestamp has no more jobs associated with it then this function will
+	 * delete the 'time' key associated with that particular key. It will also remove
+	 * the timestamps from the list of timestamps to process in the schedule.
 	 *
-	 * Used internally to remove empty delayed: items in Redis when there are
-	 * no more jobs left to run at that timestamp.
-	 *
-	 * @param DateTime|int $timestamp timestamp to cleanup
+	 * @param string $timekey The timestamp key to cleanup
 	 */
-	private static function cleanupTimestamp($timestamp)
+	private static function cleanupTimestamp($timekey)
 	{
-		$redis = \Resque::redis();
+		try {
+			$redis = \Resque::redis();
 
-		$timeKey = self::timeKey($timestamp);
-		if ($redis->hlen($timeKey) == 0) {
-			$redis->del($timeKey);
-			$redis->zrem(self::$KEY_SCHEDULE, self::getTimestamp($timestamp));
+			if ($redis->hlen($timekey) == 0) {
+				$redis->del($timekey);
+				$timestamp = str_replace(self::$KEY_TIME, "", $timekey);
+				$redis->zrem(self::$KEY_SCHEDULE, $timestamp);
+			}
+		} catch (\Exception $e) {
+			//ignorable error, as nothing bad happens if this function fails
+			//at most a particular timestamp might be picked up again and processed
+			//but at some point it should get cleared
+		}
+	}
+
+	/**
+	 * If there are no jobs left for a particular job key then this function will
+	 * delete the 'item' key associated with that particular key.
+	 *
+	 * @param string $jobkey The job key to cleanup
+	 */
+	private static function cleanupJobs($jobkey)
+	{
+		try {
+			$redis = \Resque::redis();
+
+			if ($redis->hlen($jobkey) == 0) {
+				$redis->del($jobkey);
+			}
+		} catch (\Exception $e) {
+			//ignorable error, as nothing bad happens if this function fails
 		}
 	}
 
@@ -354,9 +418,9 @@ class ResqueScheduler
 	 */
 	private static function jobKey($job) {
 		if (is_array($job))
-			return self::$KEY_ITEM . md5(json_encode($job));
+			return self::$KEY_JOB . md5(json_encode($job));
 		else
-			return self::$KEY_ITEM . md5($job);
+			return self::$KEY_JOB . md5($job);
 	}
 
 	private static function idKey($id) {
