@@ -12,7 +12,7 @@ namespace ResqueScheduler;
 */
 class ResqueScheduler
 {
-	const VERSION = "1.0";
+	const VERSION = "2.0";
 
 	private static $KEY_SCHEDULE = 'scheduler:schedule';
 	private static $KEY_TIME = 'resque:scheduler:time:';
