@@ -142,8 +142,7 @@ class ResqueScheduler
 		$redis = \Resque::$redis;
 
 		//get the time and job represented by the specific id
-		//by id
-		//the data stored is represented as follows: [TIMEKEY]:[JOBKEY]
+		//the data stored is represented as follows: [TIMEKEY]-[JOBKEY]
 		$timeandjob = $redis->get(self::idKey($id));
 		$timeandjob = explode("-", $timeandjob);
 		$timekey = $timeandjob[0];
