@@ -149,7 +149,7 @@ class ResqueScheduler
 		$timekey = $timeandjob[0];
 		$jobkey = $timeandjob[1];
 
-		//delete the job at the timestamp by its id and also by the job
+		//using its id delete the job from the timestamp hash and from the job hash
 		$redis->hdel($timekey, $id);
 		$redis->hdel($jobkey, $id);
 
@@ -220,11 +220,14 @@ class ResqueScheduler
         foreach ($idmap as $id => $ts) {
 
         	//if the timestamp of the particular job id matches the timestamp passed in
-        	//then delete that job id, and cleanup the 'job' and 'time' hashes
+        	//then delete the job from the timestamp hash and from the job hash and
+        	//delete that job id
+        	//cleanup the 'job' and 'time' hashes
         	if (intval($ts) == $timestamp) {
 
         		$timekey = self::timeKey($timestamp);
 				$redis->hdel($timekey, $id);
+				$redis->hdel($jobkey, $id);
 				$redis->del(self::idKey($id));
 				self::cleanupJobs($jobkey);
 				self::cleanupTimestamp($timekey);
@@ -299,15 +302,16 @@ class ResqueScheduler
 		$jobids = $redis->hkeys($timekey);
 
 		//if there are job ids in the list then get the actual job for the very first
-		//job id in the list, and return that.
-		//We also delete the job from the timestamp, the job itself, and
-		//cleanup the 'job' and 'time' hashes in case they are empty
+		//job id in the list, and return that
+		//We also delete the job from the timestamp and job hashes, the job itself,
+		//and cleanup the 'job' and 'time' hashes in case they are empty
 		if (!empty($jobids)) {
 
 			$job = $redis->hget($timekey, $jobids[0]);
 			$job = json_decode($job, true);
 
 			$redis->hdel($timekey, $jobids[0]);
+			$redis->hdel(self::jobKey($job), $jobids[0]);
 			$redis->del(self::idKey($jobids[0]));
 			self::cleanupJobs(self::jobKey($job));
 			self::cleanupTimestamp($timekey);
