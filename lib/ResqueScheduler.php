@@ -314,6 +314,7 @@ class ResqueScheduler
 
 			return $job;
 		} else {
+			self::cleanupTimestamp($timekey);
 			return false;
 		}
 	}
