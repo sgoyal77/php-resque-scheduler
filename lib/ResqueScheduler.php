@@ -338,7 +338,7 @@ class ResqueScheduler
 			if ($redis->hlen($timekey) == 0) {
 				$redis->del($timekey);
 				$timestamp = str_replace(self::$KEY_TIME, "", $timekey);
-				$redis->zrem(self::$KEY_SCHEDULE, $timestamp);
+				$redis->zremrangebyscore(self::$KEY_SCHEDULE, $timestamp, $timestamp);
 			}
 		} catch (\Exception $e) {
 			//ignorable error, as nothing bad happens if this function fails
