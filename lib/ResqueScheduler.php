@@ -101,7 +101,7 @@ class ResqueScheduler
 		$redis->hset($jobkey, $id, $timestamp);
 
 		//by the job's id
-		$redis->set($idkey, $timekey.":".$jobkey);
+		$redis->set($idkey, $timekey."-".$jobkey);
 		$redis->expireat($idkey, $timestamp + 300);
 
 		//add the timestamp to the list timestamps to process
@@ -145,12 +145,13 @@ class ResqueScheduler
 		//by id
 		//the data stored is represented as follows: [TIMEKEY]:[JOBKEY]
 		$timeandjob = $redis->get(self::idKey($id));
-		$timeandjob = explode(":", $timeandjob);
+		$timeandjob = explode("-", $timeandjob);
 		$timekey = $timeandjob[0];
 		$jobkey = $timeandjob[1];
 
-		//delete the job at the timestamp by its id
+		//delete the job at the timestamp by its id and also by the job
 		$redis->hdel($timekey, $id);
+		$redis->hdel($jobkey, $id);
 
 		//clean up any lingering data for that timestamp and job
 		self::cleanupTimestamp($timekey);
