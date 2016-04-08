@@ -30,11 +30,11 @@ class Worker extends \Resque_Worker
 			$this->interval = $interval;
 		}
 
-		$this->updateProcLine('Starting');
+		$this->updateProcLine('starting');
 
 		while (true) {
 			$this->handleDelayedItems();
-			$this->updateProcLine('Waiting for next delayed timestamp, current ts '.self::formatTimestamp());
+			$this->updateProcLine('waiting, current ts '.self::formatTimestamp());
 			$this->sleep();
 		}
 	}
@@ -50,7 +50,7 @@ class Worker extends \Resque_Worker
 	public function handleDelayedItems($timestamp = null)
 	{
 		while (($timestamp = ResqueScheduler::nextDelayedTimestamp($timestamp)) !== false) {
-			$this->updateProcLine('Processing Delayed Items at '.self::formatTimestamp($timestamp));
+			$this->updateProcLine('processing delayed items at '.self::formatTimestamp($timestamp));
 			$this->enqueueDelayedItemsForTimestamp($timestamp);
 		}
 	}
@@ -67,7 +67,7 @@ class Worker extends \Resque_Worker
 	{
 		$item = null;
 		while ($item = ResqueScheduler::nextItemForTimestamp($timestamp)) {
-			$status = 'queueing ' . $item['class'] . ' in ' . $item['queue'] .' [delayed]';
+			$status = 'queueing ' . $item['class'] . ' in ' . $item['queue'];
 			$this->logger->debug($status);
 			$this->updateProcLine($status);
 
