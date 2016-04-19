@@ -1,16 +1,25 @@
 <?php
 namespace ResqueScheduler;
 
+use Psr\Log\LoggerInterface;
+
 /**
  * ResqueScheduler worker to handle scheduling of delayed tasks.
  *
  * @package		ResqueScheduler
  * @author		Chris Boulton <chris@bigcommerce.com>
+ * @author		Siddhartha Goyal <siddgoyal77@gmail.com>
  * @copyright	(c) 2012 Chris Boulton
  * @license		http://www.opensource.org/licenses/mit-license.php
  */
-class Worker extends \Resque_Worker
+class Worker
 {
+	/**
+	 *
+	 * @var LoggerInterface
+	 */
+	private $logger;
+
 	/**
 	 * @var int Interval to sleep for between checking schedules.
 	 */
@@ -80,6 +89,14 @@ class Worker extends \Resque_Worker
 			$payload = array($item['queue'], $item['class'], $item['args']);
 			call_user_func_array('Resque::enqueue', $payload);
 		}
+	}
+
+	/**
+	 *
+	 * @param LoggerInterface $logger
+	 */
+	public function setLogger($logger) {
+		$this->logger = $logger;
 	}
 
 	/**
