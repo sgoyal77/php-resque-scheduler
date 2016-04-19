@@ -17,10 +17,10 @@
 	},
 	"repositories" : [{
 			"type" : "git",
-			"url" : "https://github.com/chrisboulton/php-resque"
+			"url" : "https://github.com/sgoyal77/php-resque.git"
 		}
 	],
 	"require" : {
-		"chrisboulton/php-resque" : "dev-master"
+		"chrisboulton/php-resque" : "~1.3"
 	}
 }
