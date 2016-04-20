@@ -16,8 +16,8 @@ class ResqueScheduler
 	const VERSION = "2.0";
 
 	private static $KEY_SCHEDULE = 'scheduler:schedule';
-	private static $KEY_TIME = 'resque:scheduler:time:';
-	private static $KEY_JOB = 'resque:scheduler:job:';
+	private static $KEY_TIME = 'scheduler:time:';
+	private static $KEY_JOB = 'scheduler:job:';
 	private static $KEY_ID = 'scheduler:id:';
 
 	/**
@@ -33,8 +33,6 @@ class ResqueScheduler
 	 */
 	public static function setLogger($logger) {
 		self::$logger = $logger;
-		$redis = \Resque::redis();
-		$redis->setLogger($logger);
 	}
 
 	/**

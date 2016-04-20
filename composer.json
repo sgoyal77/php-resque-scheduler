@@ -21,6 +21,6 @@
 		}
 	],
 	"require" : {
-		"chrisboulton/php-resque" : "~1.3"
+		"chrisboulton/php-resque" : "~2.0"
 	}
 }
