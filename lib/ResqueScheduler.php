@@ -1,6 +1,7 @@
 <?php
 namespace ResqueScheduler;
 
+use Psr\Log\LoggerInterface;
 /**
 * ResqueScheduler core class to handle scheduling of jobs in the future.
 *
@@ -18,6 +19,23 @@ class ResqueScheduler
 	private static $KEY_TIME = 'resque:scheduler:time:';
 	private static $KEY_JOB = 'resque:scheduler:job:';
 	private static $KEY_ID = 'scheduler:id:';
+
+	/**
+	 *
+	 * @var LoggerInterface
+	 */
+	private static $logger = false;
+
+	/**
+	 * Sets the logger to use internally and also by the Redis instance that is instantiated
+	 * when the scheduler is used
+	 * @param LoggerInterface $logger
+	 */
+	public static function setLogger($logger) {
+		self::$logger = $logger;
+		$redis = \Resque::redis();
+		$redis->setLogger($logger);
+	}
 
 	/**
 	 * Enqueue a job in a given number of seconds from now.
